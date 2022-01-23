@@ -50,7 +50,7 @@ variables.
 @rule ~a * ~b --> ~b * ~a
 ```
 """
-@auto_hash_equals struct RewriteRule <: SymbolicRule 
+@auto_hash_equals struct RewriteRule <: SymbolicRule
     expr # rule pattern stored for pretty printing
     left
     right
@@ -80,7 +80,7 @@ Base.show(io::IO,  r::RewriteRule) = print(io, r.expr)
 function (r::RewriteRule)(term)
     # n == 1 means that exactly one term of the input (term,) was matched
     success(bindings, n) = n == 1 ? instantiate(term, r.right, bindings) : nothing
-        
+
     try
         r.matcher(success, (term,), EMPTY_DICT)
     catch err
@@ -93,15 +93,15 @@ end
 # ============================================================
 
 """
-An `EqualityRule` can is a symbolic substitution rule that 
-can be rewritten bidirectional. Therefore, it should only be used 
+An `EqualityRule` can is a symbolic substitution rule that
+can be rewritten bidirectional. Therefore, it should only be used
 with the EGraphs backend.
 
 ```julia
 @rule ~a * ~b == ~b * ~a
 ```
 """
-@auto_hash_equals struct EqualityRule <: BidirRule 
+@auto_hash_equals struct EqualityRule <: BidirRule
     expr # rule pattern stored for pretty printing
     left
     right
@@ -142,14 +142,14 @@ end
 """
 This type of *anti*-rules is used for checking contradictions in the EGraph
 backend. If two terms, corresponding to the left and right hand side of an
-*anti-rule* are found in an [`EGraph`], saturation is halted immediately. 
+*anti-rule* are found in an [`EGraph`], saturation is halted immediately.
 
 ```julia
 ¬a ≠ a
 ```
 
 """
-@auto_hash_equals struct UnequalRule <: BidirRule 
+@auto_hash_equals struct UnequalRule <: BidirRule
     expr # rule pattern stored for pretty printing
     left
     right
@@ -221,11 +221,11 @@ end
 
 Base.show(io::IO, r::DynamicRule) = print(io, r.expr)
 
-function (r::DynamicRule)(term)    
+function (r::DynamicRule)(term)
     # n == 1 means that exactly one term of the input (term,) was matched
-    success(bindings, n) = if n == 1 
-        bvals = [bindings[i] for i in 1:length(r.patvars)] 
-        return r.rhs_fun(term, bindings, nothing, bvals...) 
+    success(bindings, n) = if n == 1
+        bvals = [bindings[i] for i in 1:length(r.patvars)]
+        return r.rhs_fun(term, bindings, nothing, bvals...)
     end
 
     try
