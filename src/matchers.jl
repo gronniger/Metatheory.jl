@@ -120,9 +120,14 @@ head_matcher(x, mod) = matcher(x)
 function matcher(term::PatTerm)
     op = operation(term)
     matchers = (head_matcher(op, term.mod), map(matcher, arguments(term))...,)
+    if term.alternative != nothing
+        alt_matcher = matcher(term.alternative[1])
+        alt_patvar = term.alternative[2]
+        alt_subst = term.alternative[3]
+    end
     function term_matcher(success, data, bindings)
         !islist(data) && return nothing
-        !istree(car(data)) && return nothing
+        !istree(car(data)) && (term.alternative == nothing || return alt_matcher(success, data, assoc(bindings, alt_patvar.idx, alt_subst))) && return nothing
 
         function loop(term, bindings′, matchers′) # Get it to compile faster
             # Base case, no more matchers
@@ -144,7 +149,12 @@ function matcher(term::PatTerm)
             end
         end
 
-        loop(car(data), bindings, matchers) # Try to eat exactly one term
+        match = loop(car(data), bindings, matchers) # Try to eat exactly one term
+        if term.alternative != nothing && match == nothing
+            return alt_matcher(success, data, assoc(bindings, alt_patvar.idx, alt_subst))
+        else
+            return match
+        end
     end
 end
 

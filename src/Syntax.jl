@@ -33,6 +33,9 @@ function makesegment(name::Symbol, pvars)
     PatSegment(name)
 end
 function makevar(s::Expr, pvars)
+    if exprhead(s) == Symbol("'")
+        return OptionalPatVar(makevar(arguments(s)[1], pvars))
+    end
     if !(exprhead(s) == :(::))
         error("Syntax for specifying a slot is ~x::\$predicate, where predicate is a boolean function or a type")
     end
@@ -82,6 +85,42 @@ function makepattern(x, pvars, slots, mod=@__MODULE__, splat=false)
     end
 end
 
+struct OptionalPatVar
+    x::PatVar
+end
+
+function handle_optvars(ex, patargs)
+    num_optvars = length([x for x in patargs if x isa OptionalPatVar])
+    if num_optvars == 1
+        @assert length(patargs) == 2
+        if operation(ex) == :+
+            if patargs[2] isa OptionalPatVar
+                return eval.((patargs[1], patargs[2].x, 0))
+            else
+                return eval.((patargs[2], patargs[1].x, 0))
+            end
+        elseif operation(ex) == :*
+            if patargs[2] isa OptionalPatVar
+                return eval.((patargs[1], patargs[2].x, 1))
+            else
+                return eval.((patargs[2], patargs[1].x, 1))
+            end
+        elseif operation(ex) == :^
+            if patargs[2] isa OptionalPatVar
+                return eval.((patargs[1], patargs[2].x, 1))
+            else
+                error("No optional PatVar allowed with operator", operation(ex))
+            end
+        else
+            error("No optional PatVar allowed with operator", operation(ex))
+        end
+    elseif num_optvars > 1
+        error("At most 1 optional PatVar allowed per expression level.")
+    else    # no opt var
+        return nothing
+    end
+end
+
 function makepattern(ex::Expr, pvars, slots, mod=@__MODULE__, splat=false)
     head = exprhead(ex)
     op = operation(ex)
@@ -104,7 +143,9 @@ function makepattern(ex::Expr, pvars, slots, mod=@__MODULE__, splat=false)
             end
         else # is a term
             patargs = map(i -> makepattern(i, pvars, slots, mod), args) # recurse
-            return :($PatTerm(:call, $op, [$(patargs...)], $mod))
+            alternative = handle_optvars(ex, patargs)
+            patargs_ = [(p isa OptionalPatVar ? p.x : p) for p in patargs]  # unwrap for original pattern
+            return :($PatTerm(:call, $op, [$(patargs_...)], $mod, $alternative))
         end
     elseif head === :...
         makepattern(args[1], pvars, slots, mod, true)
