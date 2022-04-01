@@ -231,7 +231,8 @@ function (r::DynamicRule)(term)
     try
         return r.matcher(success, (term,), EMPTY_DICT)
     catch err
-        throw(RuleRewriteError(r, term))
+        rethrow(err)
+        # throw(RuleRewriteError(r, term))
     end
 end
 

@@ -240,4 +240,6 @@ using SymbolicUtils
     @test (@rule (~a + ~b'*~x)^(~c)     => (~a, ~b, ~x, ~c))((1 + x)^3)     == (1, 1, x, 3)
     @test (@rule (~a + ~b*~x)^(~c')     => (~a, ~b, ~x, ~c))((1 + 2*x))     == (1, 2, x, 1)
     @test (@rule (~a' + ~b'*~x)^(~c')   => (~a, ~b, ~x, ~c))(x)             == (0, 1, x, 1)
+
+    @test_broken (@rule (~a' + ~b'*~x::Symbol)^(~c')   => (~a, ~b, ~x, ~c))(:(x))          == (0, 1, :x, 1)
 end
