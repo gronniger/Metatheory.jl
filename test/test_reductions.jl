@@ -226,10 +226,18 @@ using TermInterface
     @test false == (@capture qux(1,2) qux(3,4))
 end
 
+using SymbolicUtils
 @testset "Optional PatVars" begin
-    @test (@rule (~a + ~b*~x)^(~c) => (~a, ~b, ~x, ~c))(:((1 + 2*x)^3)) == (1, 2, :x, 3)
-    @test (@rule (~a' + ~b*~x)^(~c) => (~a, ~b, ~x, ~c))(:((2*x)^3)) == (0, 2, :x, 3)
-    @test (@rule (~a + ~b'*~x)^(~c) => (~a, ~b, ~x, ~c))(:((1 + x)^3)) == (1, 1, :x, 3)
-    @test (@rule (~a + ~b*~x)^(~c') => (~a, ~b, ~x, ~c))(:((1 + 2*x))) == (1, 2, :x, 1)
-    @test (@rule (~a' + ~b'*~x)^(~c') => (~a, ~b, ~x, ~c))(:(x)) == (0, 1, :x, 1)
+    @test (@rule (~a + ~b*~x)^(~c)      => (~a, ~b, ~x, ~c))(:((1 + 2*x)^3))== (1, 2, :x, 3)
+    @test (@rule (~a' + ~b*~x)^(~c)     => (~a, ~b, ~x, ~c))(:((2*x)^3))    == (0, 2, :x, 3)
+    @test (@rule (~a + ~b'*~x)^(~c)     => (~a, ~b, ~x, ~c))(:((1 + x)^3))  == (1, 1, :x, 3)
+    @test (@rule (~a + ~b*~x)^(~c')     => (~a, ~b, ~x, ~c))(:((1 + 2*x)))  == (1, 2, :x, 1)
+    @test (@rule (~a' + ~b'*~x)^(~c')   => (~a, ~b, ~x, ~c))(:(x))          == (0, 1, :x, 1)
+
+    @syms x
+    @test (@rule (~a + ~b*~x)^(~c)      => (~a, ~b, ~x, ~c))((1 + 2*x)^3)   == (1, 2, x, 3)
+    @test (@rule (~a' + ~b*~x)^(~c)     => (~a, ~b, ~x, ~c))(SymbolicUtils.Pow(2*x, 3)) == (0, 2, x, 3) # Pow to avoid auto simplification
+    @test (@rule (~a + ~b'*~x)^(~c)     => (~a, ~b, ~x, ~c))((1 + x)^3)     == (1, 1, x, 3)
+    @test (@rule (~a + ~b*~x)^(~c')     => (~a, ~b, ~x, ~c))((1 + 2*x))     == (1, 2, x, 1)
+    @test (@rule (~a' + ~b'*~x)^(~c')   => (~a, ~b, ~x, ~c))(x)             == (0, 1, x, 1)
 end
