@@ -234,14 +234,17 @@ using SymbolicUtils
     @test (@rule (~a + ~b*~x)^(~c')     => (~a, ~b, ~x, ~c))(:((1 + 2*x)))  == (1, 2, :x, 1)
     @test (@rule (~a' + ~b'*~x)^(~c')   => (~a, ~b, ~x, ~c))(:(x))          == (0, 1, :x, 1)
 
-    @syms x
+    @syms x y
     @test (@rule (~a + ~b*~x)^(~c)      => (~a, ~b, ~x, ~c))((1 + 2*x)^3)   == (1, 2, x, 3)
     @test (@rule (~a' + ~b*~x)^(~c)     => (~a, ~b, ~x, ~c))(SymbolicUtils.Pow(2*x, 3)) == (0, 2, x, 3) # Pow to avoid auto simplification
     @test (@rule (~a + ~b'*~x)^(~c)     => (~a, ~b, ~x, ~c))((1 + x)^3)     == (1, 1, x, 3)
     @test (@rule (~a + ~b*~x)^(~c')     => (~a, ~b, ~x, ~c))((1 + 2*x))     == (1, 2, x, 1)
     @test (@rule (~a' + ~b'*~x)^(~c')   => (~a, ~b, ~x, ~c))(x)             == (0, 1, x, 1)
 
+    @test (@rule (~a + ~b' + 2)  => (~a, ~b))(:(3 + x + 2))                 == (3, :x)
+    @test (@rule (~a + ~b' + 2)  => (~a, ~b))(:(x + 2))                     == (:x, 0)
+
+    @test_broken (@rule (~a + ~b' + 2)  => (~a, ~b))(x + y + 2)                    == (x, y)
+    @test_broken (@rule (~a + ~b' + 2)  => (~a, ~b))(x + 2)                        == (x, 0)
     @test_broken (@rule (~a' + ~b'*~x::Symbol)^(~c')   => (~a, ~b, ~x, ~c))(:(x)) == (0, 1, :x, 1)
-    @test_broken (@rule (~a + ~b' + 2)  => (~a, ~b))(:(3 + x + 2))          == (3, :x)
-    @test_broken (@rule (~a + ~b' + 2)  => (~a, ~b))(:(x + 2))              == (0, :x)
 end

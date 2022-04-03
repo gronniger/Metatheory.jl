@@ -89,28 +89,23 @@ struct OptionalPatVar
     x::PatVar
 end
 
-function handle_optvars(ex, patargs)
-    num_optvars = length([x for x in patargs if x isa OptionalPatVar])
+function handle_optvars(ex, patargs, mod)
+    opt_vars = [x for x in patargs if x isa OptionalPatVar]
+    nonopt_vars = [x for x in patargs if !(x isa OptionalPatVar)]
+    num_optvars = length(opt_vars)
     if num_optvars == 1
-        @assert length(patargs) == 2
+        opt_var = only(opt_vars)
         if operation(ex) == :+
-            if patargs[2] isa OptionalPatVar
-                return eval.((patargs[1], patargs[2].x, 0))
-            else
-                return eval.((patargs[2], patargs[1].x, 0))
-            end
+            rem_term = length(nonopt_vars) > 1 ?
+                PatTerm(:call, :+, nonopt_vars, mod, nothing) : only(nonopt_vars)
+            return eval.((rem_term, opt_var.x, 0))
         elseif operation(ex) == :*
-            if patargs[2] isa OptionalPatVar
-                return eval.((patargs[1], patargs[2].x, 1))
-            else
-                return eval.((patargs[2], patargs[1].x, 1))
-            end
+            rem_term = length(nonopt_vars) > 1 ?
+                PatTerm(:call, :*, nonopt_vars, mod, nothing) : only(nonopt_vars)
+            return eval.((rem_term, opt_var.x, 1))
         elseif operation(ex) == :^
-            if patargs[2] isa OptionalPatVar
-                return eval.((patargs[1], patargs[2].x, 1))
-            else
-                error("No optional PatVar allowed with operator", operation(ex))
-            end
+            @assert length(patargs) == 2 && patargs[2] isa OptionalPatVar
+            return eval.((patargs[1], patargs[2].x, 1))
         else
             error("No optional PatVar allowed with operator", operation(ex))
         end
@@ -143,7 +138,7 @@ function makepattern(ex::Expr, pvars, slots, mod=@__MODULE__, splat=false)
             end
         else # is a term
             patargs = map(i -> makepattern(i, pvars, slots, mod), args) # recurse
-            alternative = handle_optvars(ex, patargs)
+            alternative = handle_optvars(ex, patargs, mod)
             patargs_ = [(p isa OptionalPatVar ? p.x : p) for p in patargs]  # unwrap for original pattern
             return :($PatTerm(:call, $op, [$(patargs_...)], $mod, $alternative))
         end
