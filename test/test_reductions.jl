@@ -241,5 +241,7 @@ using SymbolicUtils
     @test (@rule (~a + ~b*~x)^(~c')     => (~a, ~b, ~x, ~c))((1 + 2*x))     == (1, 2, x, 1)
     @test (@rule (~a' + ~b'*~x)^(~c')   => (~a, ~b, ~x, ~c))(x)             == (0, 1, x, 1)
 
-    @test_broken (@rule (~a' + ~b'*~x::Symbol)^(~c')   => (~a, ~b, ~x, ~c))(:(x))          == (0, 1, :x, 1)
+    @test_broken (@rule (~a' + ~b'*~x::Symbol)^(~c')   => (~a, ~b, ~x, ~c))(:(x)) == (0, 1, :x, 1)
+    @test_broken (@rule (~a + ~b' + 2)  => (~a, ~b))(:(3 + x + 2))          == (3, :x)
+    @test_broken (@rule (~a + ~b' + 2)  => (~a, ~b))(:(x + 2))              == (0, :x)
 end
