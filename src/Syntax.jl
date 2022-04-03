@@ -381,7 +381,7 @@ macro rule(args...)
 
     return quote
         $(__source__)
-        ($RuleType)($(QuoteNode(expr)), $(esc(lhs)), $rhs)
+        ($RuleType)($(QuoteNode(e)), $(esc(lhs)), $rhs)
     end
 end
 
