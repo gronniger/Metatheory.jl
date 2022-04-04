@@ -149,6 +149,10 @@ setdebrujin!(p, pvars) = nothing
 function setdebrujin!(p::PatTerm, pvars)
     setdebrujin!(operation(p), pvars)
     foreach(x -> setdebrujin!(x, pvars), p.args)
+    if p.alternative != nothing
+        setdebrujin!(p.alternative[1], pvars)
+        setdebrujin!(p.alternative[2], pvars)
+    end
 end
 
 #TODO ADD ORIGINAL CODE OF PREDICATE TO PATVAR ?
