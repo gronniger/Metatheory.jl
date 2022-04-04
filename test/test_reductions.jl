@@ -241,12 +241,13 @@ using SymbolicUtils
     @test (@rule (~a + ~b*~x)^(~c')     => (~a, ~b, ~x, ~c))((1 + 2*x))     == (1, 2, x, 1)
     @test (@rule (~a' + ~b'*~x)^(~c')   => (~a, ~b, ~x, ~c))(x)             == (0, 1, x, 1)
 
-    @test (@rule (~a + ~b' + 2)  => (~a, ~b))(:(3 + x + 2))                 == (3, :x)
-    @test (@rule (~a + ~b' + 2)  => (~a, ~b))(:(x + 2))                     == (:x, 0)
+    @test (@rule (~a + ~b' + 2)         => (~a, ~b))(:(3 + x + 2))          == (3, :x)
+    @test (@rule (~a + ~b' + 2)         => (~a, ~b))(:(x + 2))              == (:x, 0)
 
     # argument order changed to canoncical -> similar to ACRule required
     @test_broken (@rule (~a + ~b' + 2)  => (~a, ~b))(x + y + 2)             == (x, y)
     @test_broken (@rule (~a + ~b' + 2)  => (~a, ~b))(x + 2)                 == (x, 0)
 
-    @test (@rule (~a' + ~b'*~x::Symbol)^(~c')   => (~a, ~b, ~x, ~c))(:(x)) == (0, 1, :x, 1)
+    @test (@rule (~a'::Int + ~b'::Int*~x::Symbol)^(~c'::Int) => (~a, ~b, ~x, ~c))(:(x)) == (0, 1, :x, 1)
+    @test (@rule (~a'::Int + ~b'::Int*~x)^(~c'::Int) => (~a, ~b, ~x, ~c))(x) == (0, 1, x, 1)
 end

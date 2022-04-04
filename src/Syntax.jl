@@ -39,10 +39,18 @@ function makevar(s::Expr, pvars)
     if !(exprhead(s) == :(::))
         error("Syntax for specifying a slot is ~x::\$predicate, where predicate is a boolean function or a type")
     end
-
-    name = arguments(s)[1]
-    name ∉ pvars && push!(pvars, name)
-    return :($PatVar($(QuoteNode(name)), -1, $(arguments(s)[2])))
+    if arguments(s)[1] isa Symbol
+        name = arguments(s)[1]
+        name ∉ pvars && push!(pvars, name)
+        return :($PatVar($(QuoteNode(name)), -1, $(arguments(s)[2])))
+    elseif arguments(s)[1] isa Expr && exprhead(arguments(s)[1]) == Symbol("'")
+        name = arguments(arguments(s)[1])[1]
+        name ∉ pvars && push!(pvars, name)
+        patvar = eval(:($PatVar($(QuoteNode(name)), -1, $(arguments(s)[2]))))
+        return OptionalPatVar(patvar)
+    else
+        error("Syntax for specifying an optional slot is ~x'::\$predicate, where predicate is a boolean function or a type")
+    end
 end
 function makevar(name::Symbol, pvars)
     name ∉ pvars && push!(pvars, name)
@@ -85,7 +93,7 @@ function makepattern(x, pvars, slots, mod=@__MODULE__, splat=false)
     end
 end
 
-struct OptionalPatVar
+struct OptionalPatVar <: AbstractPat
     x::PatVar
 end
 
