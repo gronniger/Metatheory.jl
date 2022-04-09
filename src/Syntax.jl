@@ -367,8 +367,10 @@ See also: [`@capture`](@ref), [`@slots`](@ref)
 """
 macro rule(args...)
     length(args) >= 1 || ArgumentError("@rule requires at least one argument")
-    slots = args[1:end-1]
-    expr = args[end]
+    last_nonkwarg = findlast(x -> !Meta.isexpr(x, :(=)), args)
+    slots = args[1:last_nonkwarg-1]
+    expr = args[last_nonkwarg]
+    kwargs = args[last_nonkwarg+1:end]
 
     e = macroexpand(__module__, expr)
     e = rmlines(e)
