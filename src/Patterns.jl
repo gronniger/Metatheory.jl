@@ -94,8 +94,10 @@ struct PatTerm <: AbstractPat
     args::Vector
     mod::Module # useful to match against function head symbols and function objs at the same time
     alternative::Any    # nothing or (::AbstractPat, var, default_val)
-    # PatTerm(eh, op, args, mod) = new(eh, op, args, mod, Ref{UInt}(0))
+    args_permutations::Function  # function that generates iterable of allowable argument permutations for this term (and op) given arguments
 end
+no_permutation(vec) = [vec]
+PatTerm(expr, op, args, mod, alt) = PatTerm(expr, op, args, mod, alt, no_permutation)
 PatTerm(expr, op, args, mod) = PatTerm(expr, op, args, mod, nothing)
 TermInterface.istree(::Type{PatTerm}) = true
 TermInterface.exprhead(e::PatTerm) = e.exprhead

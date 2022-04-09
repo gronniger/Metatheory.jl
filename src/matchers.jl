@@ -119,7 +119,7 @@ head_matcher(x, mod) = matcher(x)
 
 function matcher(term::PatTerm)
     op = operation(term)
-    matchers = (head_matcher(op, term.mod), map(matcher, arguments(term))...,)
+    matchers_list = [(head_matcher(op, term.mod), map(matcher, args)...,) for args in term.args_permutations(arguments(term))]
     if term.alternative != nothing
         alt_matcher = matcher(term.alternative[1])
         alt_patvar = term.alternative[2]
@@ -148,8 +148,11 @@ function matcher(term::PatTerm)
                 loop(drop_n(term, n), b, cdr(matchers′))
             end
         end
-
-        match = loop(car(data), bindings, matchers) # Try to eat exactly one term
+        match = nothing
+        for matchers in matchers_list
+            match = loop(car(data), bindings, matchers) # Try to eat exactly one term
+            if match != nothing break end
+        end
         if term.alternative != nothing && match == nothing
             return alt_matcher(success, data, assoc(bindings, alt_patvar.idx, alt_subst))
         else
