@@ -15,8 +15,8 @@ function matcher(val::Any)
 end
 
 function matcher(slot::PatVar)
-    pred = slot.predicate 
-    if slot.predicate isa Type 
+    pred = slot.predicate
+    if slot.predicate isa Type
         pred = x -> typeof(x) <: slot.predicate
     end
     function slot_matcher(next, data, bindings)
@@ -28,7 +28,7 @@ function matcher(slot::PatVar)
             end
         else
             # Variable is not bound, first time it is found
-            # check the predicate            
+            # check the predicate
             if pred(car(data))
                 next(assoc(bindings, slot.idx, car(data)), 1)
             end
@@ -94,22 +94,22 @@ end
 # Slows things down a bit but lets this matcher work at the same time on both purely symbolic Expr-like object
 # and SymbolicUtils-like objects that store function references as operations.
 function head_matcher(f::Symbol, mod)
-    checkhead = try 
+    checkhead = try
         fobj = getproperty(mod, f)
         (x) -> (isequal(x, f) || isequal(x, fobj))
-    catch e 
+    catch e
         if e isa UndefVarError
             (x) -> isequal(x, f)
         else
             rethrow(e)
         end
-    end 
+    end
 
     function head_matcher(next, data, bindings)
         h = car(data)
         if islist(data) && checkhead(h)
             next(bindings, 1)
-        else 
+        else
             nothing
         end
     end
@@ -119,10 +119,15 @@ head_matcher(x, mod) = matcher(x)
 
 function matcher(term::PatTerm)
     op = operation(term)
-    matchers = (head_matcher(op, term.mod), map(matcher, arguments(term))...,)
+    matchers_list = [(head_matcher(op, term.mod), map(matcher, args)...,) for args in term.args_permutations(arguments(term))]
+    if term.alternative != nothing
+        alt_matcher = matcher(term.alternative[1])
+        alt_patvar = term.alternative[2]
+        alt_subst = term.alternative[3]
+    end
     function term_matcher(success, data, bindings)
         !islist(data) && return nothing
-        !istree(car(data)) && return nothing
+        !istree(car(data)) && (term.alternative == nothing || return alt_matcher(success, data, assoc(bindings, alt_patvar.idx, alt_subst))) && return nothing
 
         function loop(term, bindings′, matchers′) # Get it to compile faster
             # Base case, no more matchers
@@ -137,14 +142,22 @@ function matcher(term::PatTerm)
             car(matchers′)(term, bindings′) do b, n
                 # recursion case:
                 # take the first matcher, on success,
-                # keep looping by matching the rest 
-                # by removing the first n matched elements 
-                # from the term, with the bindings, 
+                # keep looping by matching the rest
+                # by removing the first n matched elements
+                # from the term, with the bindings,
                 loop(drop_n(term, n), b, cdr(matchers′))
             end
         end
-
-        loop(car(data), bindings, matchers) # Try to eat exactly one term
+        match = nothing
+        for matchers in matchers_list
+            match = loop(car(data), bindings, matchers) # Try to eat exactly one term
+            if match != nothing break end
+        end
+        if term.alternative != nothing && match == nothing
+            return alt_matcher(success, data, assoc(bindings, alt_patvar.idx, alt_subst))
+        else
+            return match
+        end
     end
 end
 
@@ -152,7 +165,7 @@ end
 # TODO REVIEWME
 function instantiate(left, pat::PatTerm, mem)
     ar = arguments(pat)
-    args = [ instantiate(left, p, mem) for p in ar] 
+    args = [ instantiate(left, p, mem) for p in ar]
     T = istree(typeof(left)) ? typeof(left) : Expr
     similarterm(T, operation(pat), args; exprhead=exprhead(pat))
 end
@@ -168,4 +181,3 @@ end
 function instantiate(left, pat::PatSegment, mem)
     mem[pat.idx]
 end
-

@@ -12,7 +12,7 @@ function binarize(e::T) where {T}
         end
     end
     return e
-end 
+end
 
 """
 Recursive version of binarize
@@ -36,7 +36,7 @@ end
 const binarize_ops = [:(+), :(*), (+), (*)]
 
 function cleanast(e::Expr)
-    # TODO better line removal 
+    # TODO better line removal
     if isexpr(e, :block)
         return Expr(e.head, filter(x -> !(x isa LineNumberNode), e.args)...)
     end
@@ -94,7 +94,7 @@ end
 end
 @inline drop_n(ll::Union{Tuple,AbstractArray}, n) = drop_n(LL(ll, 1), n)
 @inline drop_n(ll::LL, n) = LL(ll.v, ll.i + n)
-            
+
 
 
 isliteral(::Type{T}) where {T} = x -> x isa T
@@ -160,12 +160,15 @@ end
 macro matchable(expr)
     @assert expr.head == :struct
     name = expr.args[2]
+    if name isa Expr && name.head === :(<:)
+        name = name.args[1]
+    end
     if name isa Expr && name.head === :curly
         name = name.args[1]
     end
-    fields = filter(x -> !(x isa LineNumberNode), expr.args[3].args)
+    fields = filter(x -> (x isa Symbol || x isa Expr && x.head ==:(::)), expr.args[3].args)
     get_name(s::Symbol) = s
-    get_name(e::Expr) = (@assert(e.head == :(::)); e.args[1])
+    get_name(e::Expr) = e.args[1]
     fields = map(get_name, fields)
     quote
         $expr

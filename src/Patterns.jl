@@ -1,4 +1,4 @@
-module Patterns 
+module Patterns
 
 using Metatheory: binarize, cleanast, alwaystrue
 using AutoHashEquals
@@ -6,7 +6,7 @@ using TermInterface
 
 
 """
-Abstract type representing a pattern used in all the various pattern matching backends. 
+Abstract type representing a pattern used in all the various pattern matching backends.
 """
 abstract type AbstractPat end
 
@@ -15,14 +15,14 @@ struct UnsupportedPatternException <: Exception
     p::AbstractPat
 end
 
-Base.showerror(io::IO, e::UnsupportedPatternException) = 
+Base.showerror(io::IO, e::UnsupportedPatternException) =
     print(io, "Pattern ", e.p, " is unsupported in this context")
 
 
 Base.isequal(a::AbstractPat, b::AbstractPat) = false
 TermInterface.arity(p::AbstractPat) = 0
 """
-A ground pattern contains no pattern variables and 
+A ground pattern contains no pattern variables and
 only literal values to match.
 """
 isground(p::AbstractPat) = false
@@ -39,14 +39,14 @@ Matcher pattern may contain pattern variables with attached predicates,
 where `predicate` is a function that takes a matched expression and returns a
 boolean value. Such a slot will be considered a match only if `f` returns true.
 
-`predicate` can also be a `Type{<:t}`, this predicate is called a 
-type assertion. Type assertions on a `PatVar`, will match if and only if 
-the type of the matched term for the pattern variable is a subtype of `T`. 
+`predicate` can also be a `Type{<:t}`, this predicate is called a
+type assertion. Type assertions on a `PatVar`, will match if and only if
+the type of the matched term for the pattern variable is a subtype of `T`.
 """
-mutable struct PatVar{P} <: AbstractPat 
-    name::Symbol 
-    idx::Int 
-    predicate::P 
+mutable struct PatVar{P} <: AbstractPat
+    name::Symbol
+    idx::Int
+    predicate::P
 end
 function Base.isequal(a::PatVar, b::PatVar)
     # (a.name == b.name)
@@ -57,10 +57,10 @@ PatVar(var, i) = PatVar(var, i, alwaystrue)
 
 """
 If you want to match a variable number of subexpressions at once, you will need
-a **segment pattern**. 
-A segment pattern represents a vector of subexpressions matched. 
-You can attach a predicate `g` to a segment variable. In the case of segment variables `g` gets a vector of 0 or more 
-expressions and must return a boolean value. 
+a **segment pattern**.
+A segment pattern represents a vector of subexpressions matched.
+You can attach a predicate `g` to a segment variable. In the case of segment variables `g` gets a vector of 0 or more
+expressions and must return a boolean value.
 """
 mutable struct PatSegment{P} <: AbstractPat
     name::Symbol
@@ -85,7 +85,7 @@ PatSegment(v, i) = PatSegment(v, i, alwaystrues)
 
 """
 Term patterns will match
-on terms of the same `arity` and with the same 
+on terms of the same `arity` and with the same
 function symbol `operation` and expression head `exprhead`.
 """
 struct PatTerm <: AbstractPat
@@ -93,8 +93,12 @@ struct PatTerm <: AbstractPat
     operation::Any
     args::Vector
     mod::Module # useful to match against function head symbols and function objs at the same time
-    PatTerm(eh, op, args, mod) = new(eh, op, args, mod) #Ref{UInt}(0))
+    alternative::Any    # nothing or (::AbstractPat, var, default_val)
+    args_permutations::Function  # function that generates iterable of allowable argument permutations for this term (and op) given arguments
 end
+no_permutation(vec) = [vec]
+PatTerm(expr, op, args, mod, alt) = PatTerm(expr, op, args, mod, alt, no_permutation)
+PatTerm(expr, op, args, mod) = PatTerm(expr, op, args, mod, nothing)
 TermInterface.istree(::Type{PatTerm}) = true
 TermInterface.exprhead(e::PatTerm) = e.exprhead
 TermInterface.operation(p::PatTerm) = p.operation
@@ -144,9 +148,13 @@ end
 # literal case
 setdebrujin!(p, pvars) = nothing
 
-function setdebrujin!(p::PatTerm, pvars) 
+function setdebrujin!(p::PatTerm, pvars)
     setdebrujin!(operation(p), pvars)
     foreach(x -> setdebrujin!(x, pvars), p.args)
+    if p.alternative != nothing
+        setdebrujin!(p.alternative[1], pvars)
+        setdebrujin!(p.alternative[2], pvars)
+    end
 end
 
 #TODO ADD ORIGINAL CODE OF PREDICATE TO PATVAR ?
@@ -161,21 +169,21 @@ end
 to_expr(x::Any) = x
 
 function to_expr(x::PatSegment)
-    Expr(:...,  x.predicate == alwaystrue ? Expr(:call, :~, x.name) : 
+    Expr(:...,  x.predicate == alwaystrue ? Expr(:call, :~, x.name) :
         Expr(:call, :~, Expr(:(::), x.name, x.predicate))
     )
 end
 
-to_expr(x::PatSegment{typeof(alwaystrue)}) = 
+to_expr(x::PatSegment{typeof(alwaystrue)}) =
     Expr(:..., Expr(:call, :~, x.name))
 
-to_expr(x::PatSegment{T}) where {T <: Function} = 
+to_expr(x::PatSegment{T}) where {T <: Function} =
     Expr(:..., Expr(:call, :~, Expr(:(::), x.name, nameof(T))))
 
-to_expr(x::PatSegment{<:Type{T}}) where T = 
+to_expr(x::PatSegment{<:Type{T}}) where T =
     Expr(:..., Expr(:call, :~, Expr(:(::), x.name, T)))
 
-function to_expr(x::PatTerm) 
+function to_expr(x::PatTerm)
     pl = operation(x)
     similarterm(Expr, pl, map(to_expr, arguments(x)); exprhead=exprhead(x))
 end

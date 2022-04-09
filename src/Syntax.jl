@@ -8,7 +8,7 @@ using Metatheory:alwaystrue, cleanast, binarize
 export @rule
 export @theory
 export @slots
-export @capture 
+export @capture
 
 
 # FIXME this thing eats up macro calls!
@@ -28,20 +28,31 @@ function makesegment(s::Expr, pvars)
     name ∉ pvars && push!(pvars, name)
     return :($PatSegment($(QuoteNode(name)), -1, $(arguments(s)[2])))
 end
-function makesegment(name::Symbol, pvars) 
+function makesegment(name::Symbol, pvars)
     name ∉ pvars && push!(pvars, name)
     PatSegment(name)
 end
 function makevar(s::Expr, pvars)
+    if exprhead(s) == Symbol("'")
+        return OptionalPatVar(makevar(arguments(s)[1], pvars))
+    end
     if !(exprhead(s) == :(::))
         error("Syntax for specifying a slot is ~x::\$predicate, where predicate is a boolean function or a type")
     end
-
-    name = arguments(s)[1]
-    name ∉ pvars && push!(pvars, name)
-    return :($PatVar($(QuoteNode(name)), -1, $(arguments(s)[2])))
+    if arguments(s)[1] isa Symbol
+        name = arguments(s)[1]
+        name ∉ pvars && push!(pvars, name)
+        return :($PatVar($(QuoteNode(name)), -1, $(arguments(s)[2])))
+    elseif arguments(s)[1] isa Expr && exprhead(arguments(s)[1]) == Symbol("'")
+        name = arguments(arguments(s)[1])[1]
+        name ∉ pvars && push!(pvars, name)
+        patvar = eval(:($PatVar($(QuoteNode(name)), -1, $(arguments(s)[2]))))
+        return OptionalPatVar(patvar)
+    else
+        error("Syntax for specifying an optional slot is ~x'::\$predicate, where predicate is a boolean function or a type")
+    end
 end
-function makevar(name::Symbol, pvars) 
+function makevar(name::Symbol, pvars)
     name ∉ pvars && push!(pvars, name)
     PatVar(name)
 end
@@ -64,7 +75,7 @@ function makeconsequent(expr::Expr)
                 error("Error when parsing right hand side")
             end
         else
-            return Expr(head, makeconsequent(op), 
+            return Expr(head, makeconsequent(op),
                 map(makeconsequent, args)...)
         end
     else
@@ -74,11 +85,42 @@ end
 
 makeconsequent(x) = x
 # treat as a literal
-function makepattern(x, pvars, slots, mod=@__MODULE__, splat=false) 
-    if splat 
+function makepattern(x, pvars, slots, mod=@__MODULE__, splat=false)
+    if splat
         x in slots ? makesegment(x, pvars) : x
     else
         x in slots ? makevar(x, pvars) : x
+    end
+end
+
+struct OptionalPatVar <: AbstractPat
+    x::PatVar
+end
+
+function handle_optvars(ex, patargs, mod)
+    opt_vars = [x for x in patargs if x isa OptionalPatVar]
+    nonopt_vars = [x for x in patargs if !(x isa OptionalPatVar)]
+    num_optvars = length(opt_vars)
+    if num_optvars == 1
+        opt_var = only(opt_vars)
+        if operation(ex) == :+
+            rem_term = length(nonopt_vars) > 1 ?
+                PatTerm(:call, :+, nonopt_vars, mod, nothing) : only(nonopt_vars)
+            return eval.((rem_term, opt_var.x, 0))
+        elseif operation(ex) == :*
+            rem_term = length(nonopt_vars) > 1 ?
+                PatTerm(:call, :*, nonopt_vars, mod, nothing) : only(nonopt_vars)
+            return eval.((rem_term, opt_var.x, 1))
+        elseif operation(ex) == :^
+            @assert length(patargs) == 2 && patargs[2] isa OptionalPatVar
+            return eval.((patargs[1], patargs[2].x, 1))
+        else
+            error("No optional PatVar allowed with operator", operation(ex))
+        end
+    elseif num_optvars > 1
+        error("At most 1 optional PatVar allowed per expression level.")
+    else    # no opt var
+        return nothing
     end
 end
 
@@ -90,7 +132,7 @@ function makepattern(ex::Expr, pvars, slots, mod=@__MODULE__, splat=false)
     op = op isa Symbol ? QuoteNode(op) : op
     #throw(Meta.ParseError("Unsupported pattern syntax $ex"))
 
-    
+
     if head === :call
         if operation(ex) === :(~) # is a variable or segment
             if args[1] isa Expr && operation(args[1]) == :(~)
@@ -104,19 +146,21 @@ function makepattern(ex::Expr, pvars, slots, mod=@__MODULE__, splat=false)
             end
         else # is a term
             patargs = map(i -> makepattern(i, pvars, slots, mod), args) # recurse
-            return :($PatTerm(:call, $op, [$(patargs...)], $mod))
+            alternative = handle_optvars(ex, patargs, mod)
+            patargs_ = [(p isa OptionalPatVar ? p.x : p) for p in patargs]  # unwrap for original pattern
+            return :($PatTerm(:call, $op, [$(patargs_...)], $mod, $alternative))
         end
-    elseif head === :... 
+    elseif head === :...
         makepattern(args[1], pvars, slots, mod, true)
     elseif head == :(::) && args[1] in slots
         return splat ? makesegment(ex, pvars) : makevar(ex, pvars)
-    elseif head === :ref 
-        # getindex 
+    elseif head === :ref
+        # getindex
         patargs = map(i -> makepattern(i, pvars, slots, mod), args) # recurse
         return :($PatTerm(:ref, getindex, [$(patargs...)], $mod))
     elseif head === :$
         return args[1]
-    else 
+    else
         patargs = map(i -> makepattern(i, pvars, slots, mod), args) # recurse
         return :($PatTerm($(head isa Symbol ? QuoteNode(head) : head), $(op isa Symbol ? QuoteNode(op) : op), [$(patargs...)], $mod))
         # throw(Meta.ParseError("Unsupported pattern syntax $ex"))
@@ -141,7 +185,7 @@ Rewrite the `expr` by dealing with `:where` if necessary.
 The `:where` is rewritten from, for example, `~x where f(~x)` to `f(~x) ? ~x : nothing`.
 """
 function rewrite_rhs(ex::Expr)
-    if exprhead(ex) == :where 
+    if exprhead(ex) == :where
         args = arguments(ex)
         rhs = args[1]
         predicate = args[2]
@@ -323,14 +367,16 @@ See also: [`@capture`](@ref), [`@slots`](@ref)
 """
 macro rule(args...)
     length(args) >= 1 || ArgumentError("@rule requires at least one argument")
-    slots = args[1:end-1]
-    expr = args[end]
+    last_nonkwarg = findlast(x -> !Meta.isexpr(x, :(=)), args)
+    slots = args[1:last_nonkwarg-1]
+    expr = args[last_nonkwarg]
+    kwargs = args[last_nonkwarg+1:end]
 
     e = macroexpand(__module__, expr)
     e = rmlines(e)
     op = operation(e)
     RuleType = rule_sym_map(e)
-    
+
     l, r = arguments(e)
     pvars = Symbol[]
     lhs = makepattern(l, pvars, slots, __module__)
@@ -345,7 +391,7 @@ macro rule(args...)
 
     return quote
         $(__source__)
-        ($RuleType)($(QuoteNode(expr)), $(esc(lhs)), $rhs)
+        ($RuleType)($(QuoteNode(e)), $(esc(lhs)), $rhs)
     end
 end
 
@@ -354,11 +400,11 @@ end
 """
     @theory [SLOTS...] begin (LHS operator RHS)... end
 
-Syntax sugar to define a vector of rules in a nice and readable way. Can use `@slots` or have the slots 
+Syntax sugar to define a vector of rules in a nice and readable way. Can use `@slots` or have the slots
 as the first arguments:
 
 ```
-julia> t = @theory x y z begin 
+julia> t = @theory x y z begin
     x * (y + z) --> (x * y) + (x * z)
     x + y       ==  (y + x)
     #...
@@ -440,4 +486,3 @@ end
 
 
 end
-

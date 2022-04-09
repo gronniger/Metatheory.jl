@@ -19,12 +19,12 @@ import Base.(+)
     t = @theory begin
         ~a + ~a --> 2(~a)
     end
-	
+
     # Let's extend an operator from base, for sake of example
     function +(x::Symbol, y)
         rewrite(:($x + $y), t)
     end
-	
+
     @test (:x + :x) == :(2x)
 end
 
@@ -139,8 +139,8 @@ end
 end
 
 
-module NonCall 
-using Metatheory 
+module NonCall
+using Metatheory
 t = [@rule a b (a, b) --> ok(a,b)]
 
 test() = rewrite(:(x,y), t)
@@ -151,7 +151,7 @@ end
 end
 
 
-@testset "Pattern matcher can match on both function object references and name symbols" begin 
+@testset "Pattern matcher can match on both function object references and name symbols" begin
 	ex = :($(+)($(sin)(x)^2, $(cos)(x)^2))
 	r = @rule(sin(~x)^2 + cos(~x)^2 --> 1)
 
@@ -160,7 +160,7 @@ end
 
 
 
-@testset "Pattern variable as pattern term head" begin 
+@testset "Pattern variable as pattern term head" begin
 	foo(x) = x+2
 	ex = :(($foo)(bar, 2, pazz))
 	r = @rule ((~f)(~x, 2, ~y) => (~f)(2))
@@ -176,7 +176,7 @@ using Metatheory.Syntax: @capture
 
     #note that @test inserts a soft local scope (try-catch) that would gobble
     #the matches from assignment statements in @capture macro, so we call it
-    #outside the test macro 
+    #outside the test macro
     ret = @capture ex (~x)^(~x)
     @test ret
     @test @isdefined x
@@ -204,7 +204,7 @@ using Metatheory.Syntax: @capture
     x = 1
     r = (@capture x x)
     @test r == true
-end 
+end
 
 using TermInterface
 @testset "Matchable struct" begin
@@ -215,13 +215,39 @@ using TermInterface
     TermInterface.operation(::qux) = qux
     TermInterface.istree(::Type{qux}) = true
     TermInterface.arguments(x::qux) = [x.args...]
-    
+
     @capture qux(1, 2) qux(1, 2)
-    
+
     @test (@rule qux(1, 2)=>"hello")(qux(1, 2)) == "hello"
     @test (@rule qux(1, 2)=>"hello")(1) === nothing
     @test (@rule 1=>"hello")(1) == "hello"
     @test (@rule 1=>"hello")(qux(1, 2)) === nothing
     @test (@capture qux(1, 2) qux(1, 2))
     @test false == (@capture qux(1,2) qux(3,4))
+end
+
+using SymbolicUtils
+@testset "Optional PatVars" begin
+    @test (@rule (~a + ~b*~x)^(~c)      => (~a, ~b, ~x, ~c))(:((1 + 2*x)^3))== (1, 2, :x, 3)
+    @test (@rule (~a' + ~b*~x)^(~c)     => (~a, ~b, ~x, ~c))(:((2*x)^3))    == (0, 2, :x, 3)
+    @test (@rule (~a + ~b'*~x)^(~c)     => (~a, ~b, ~x, ~c))(:((1 + x)^3))  == (1, 1, :x, 3)
+    @test (@rule (~a + ~b*~x)^(~c')     => (~a, ~b, ~x, ~c))(:((1 + 2*x)))  == (1, 2, :x, 1)
+    @test (@rule (~a' + ~b'*~x)^(~c')   => (~a, ~b, ~x, ~c))(:(x))          == (0, 1, :x, 1)
+
+    @syms x y
+    @test (@rule (~a + ~b*~x)^(~c)      => (~a, ~b, ~x, ~c))((1 + 2*x)^3)   == (1, 2, x, 3)
+    @test (@rule (~a' + ~b*~x)^(~c)     => (~a, ~b, ~x, ~c))(SymbolicUtils.Pow(2*x, 3)) == (0, 2, x, 3) # Pow to avoid auto simplification
+    @test (@rule (~a + ~b'*~x)^(~c)     => (~a, ~b, ~x, ~c))((1 + x)^3)     == (1, 1, x, 3)
+    @test (@rule (~a + ~b*~x)^(~c')     => (~a, ~b, ~x, ~c))((1 + 2*x))     == (1, 2, x, 1)
+    @test (@rule (~a' + ~b'*~x)^(~c')   => (~a, ~b, ~x, ~c))(x)             == (0, 1, x, 1)
+
+    @test (@rule (~a + ~b' + 2)         => (~a, ~b))(:(3 + x + 2))          == (3, :x)
+    @test (@rule (~a + ~b' + 2)         => (~a, ~b))(:(x + 2))              == (:x, 0)
+
+    # argument order changed to canoncical -> similar to ACRule required
+    @test_broken (@rule (~a + ~b' + 2)  => (~a, ~b))(x + y + 2)             == (x, y)
+    @test_broken (@rule (~a + ~b' + 2)  => (~a, ~b))(x + 2)                 == (x, 0)
+
+    @test (@rule (~a'::Int + ~b'::Int*~x::Symbol)^(~c'::Int) => (~a, ~b, ~x, ~c))(:(x)) == (0, 1, :x, 1)
+    @test (@rule (~a'::Int + ~b'::Int*~x)^(~c'::Int) => (~a, ~b, ~x, ~c))(x) == (0, 1, x, 1)
 end
